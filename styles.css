@@ -1,64 +1,62 @@
-body {
-  margin: 0;
-  font-family: -apple-system, system-ui, Arial, sans-serif;
-  background: #0b0f14;
-  color: #e9f0fb;
+const PROGRAM = {
+  day1: {
+    title: "Day 1 – Lower Body Power",
+    exercises: [
+      ["Back Squat", "https://www.youtube.com/watch?v=Dy28eq2PjcM"],
+      ["Romanian Deadlift", "https://www.youtube.com/watch?v=0Y8sJzQGf0k"],
+      ["Walking Lunges", "https://www.youtube.com/watch?v=ReNofXwy_js"],
+      ["Box Jumps", "https://www.youtube.com/watch?v=52r_Ul5k03g"],
+      ["Calf Raises", "https://www.youtube.com/watch?v=k8ipHzKeAkQ"]
+    ]
+  },
+
+  day2: {
+    title: "Day 2 – Upper Body Strength",
+    exercises: [
+      ["Bench Press", "https://www.youtube.com/watch?v=rT7DgCr-3pg"],
+      ["Pull-Ups", "https://www.youtube.com/watch?v=eGo4IYlbE5g"],
+      ["Dumbbell Shoulder Press", "https://www.youtube.com/watch?v=B-aVuyhvLHU"],
+      ["Barbell Rows", "https://www.youtube.com/watch?v=RQU8wZPbioA"],
+      ["Plank Hold", "https://www.youtube.com/watch?v=pSHjTRCQxIw"]
+    ]
+  },
+
+  day3: {
+    title: "Day 3 – Speed & Athleticism",
+    exercises: [
+      ["Trap Bar Deadlift", "https://www.youtube.com/watch?v=JWz6KcRz3AI"],
+      ["Broad Jumps", "https://www.youtube.com/watch?v=5Vb5P3X5VOU"],
+      ["Sled Push (or Heavy March)", "https://www.youtube.com/watch?v=U5zrloYWwxw"],
+      ["Med Ball Slams", "https://www.youtube.com/watch?v=9RrR2nJ4zvM"],
+      ["Farmer Carries", "https://www.youtube.com/watch?v=lLAw6fUccKA"]
+    ]
+  }
+};
+
+const view = document.getElementById("view");
+const tabs = document.querySelectorAll(".tab");
+
+tabs.forEach(tab => {
+  tab.addEventListener("click", () => {
+    tabs.forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    render(tab.dataset.day);
+  });
+});
+
+function render(day) {
+  const d = PROGRAM[day];
+  view.innerHTML = `<div class="card"><h2>${d.title}</h2></div>`;
+
+  d.exercises.forEach(([name, link]) => {
+    const row = document.createElement("div");
+    row.className = "exercise";
+    row.innerHTML = `
+      <div>${name}</div>
+      <button onclick="window.open('${link}','_blank')">YouTube</button>
+    `;
+    view.appendChild(row);
+  });
 }
 
-header {
-  padding: 16px;
-}
-
-.subtitle {
-  color: #aab6c5;
-  font-size: 14px;
-}
-
-.tabs {
-  display: flex;
-  gap: 8px;
-  padding: 10px;
-}
-
-.tab {
-  flex: 1;
-  padding: 10px;
-  background: #121a24;
-  color: #e9f0fb;
-  border-radius: 10px;
-  border: none;
-}
-
-.tab.active {
-  background: #4aa3ff;
-  color: #04121f;
-  font-weight: bold;
-}
-
-main {
-  padding: 12px;
-  display: grid;
-  gap: 12px;
-}
-
-.card {
-  background: #121a24;
-  border-radius: 14px;
-  padding: 12px;
-}
-
-.exercise {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 6px 0;
-}
-
-button {
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: none;
-  background: #4aa3ff;
-  color: #04121f;
-  font-weight: bold;
-}
+render("day1");

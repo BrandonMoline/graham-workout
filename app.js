@@ -1,5 +1,7 @@
-// Graham’s Workout Plan — Logging + Profile (localStorage autosave)
-// Stores workout logs + notes + profile on the iPhone (no account).
+// Graham’s Workout Plan — Logging + Profile + History (localStorage autosave)
+// - Log weight + reps per set with target reps
+// - Profile page stores athlete info
+// - History page stores saved sessions (tap "Save Workout to History")
 
 const PROGRAM = {
   day1: {
@@ -30,7 +32,7 @@ const PROGRAM = {
     exercises: [
       { name: "Trap Bar Deadlift", sets: 3, targetReps: 5, link: "https://www.youtube.com/watch?v=JWz6KcRz3AI" },
       { name: "Broad Jumps", sets: 3, targetReps: 3, link: "https://www.youtube.com/watch?v=5Vb5P3X5VOU" },
-      { name: "Sled Push (or Heavy March)", sets: 4, targetReps: 20, link: "https://www.youtube.com/watch?v=U5zrloYWwxw" },
+      { name: "Sled Push (or Heavy March)", sets: 4, targetReps: 20, link: "https://www.youtube.com/watch?v=U5zrloYWwxw" }, // treat as seconds or yards
       { name: "Med Ball Slams", sets: 3, targetReps: 8, link: "https://www.youtube.com/watch?v=9RrR2nJ4zvM" },
       { name: "Farmer Carries (seconds)", sets: 3, targetReps: 40, link: "https://www.youtube.com/watch?v=lLAw6fUccKA" }
     ]
@@ -38,18 +40,23 @@ const PROGRAM = {
 };
 
 // ---------- Storage ----------
-const KEY = "grahams-workout-plan:v2";
+const KEY = "grahams-workout-plan:v3";
 
 function todayISO() {
   const d = new Date();
   return d.toISOString().slice(0, 10);
 }
 
+function uid() {
+  // simple unique id
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function loadState() {
   const raw = localStorage.getItem(KEY);
   if (!raw) {
     return {
-      activeDay: "day1",
+      activeTab: "day1",
       date: todayISO(),
       profile: {
         name: "Graham",
@@ -61,10 +68,18 @@ function loadState() {
         goals: "Strength + speed"
       },
       notes: { day1: "", day2: "", day3: "" },
-      logs: { day1: {}, day2: {}, day3: {} }
+      logs: { day1: {}, day2: {}, day3: {} },
+      // history: array of saved sessions
+      history: []
     };
   }
-  return JSON.parse(raw);
+  const parsed = JSON.parse(raw);
+
+  // Backward compatibility if older version had activeDay:
+  if (parsed.activeDay && !parsed.activeTab) parsed.activeTab = parsed.activeDay;
+  if (!parsed.history) parsed.history = [];
+
+  return parsed;
 }
 
 function saveState() {
@@ -80,6 +95,17 @@ function ensureExerciseLog(day, ex) {
   }
 }
 
+function deepClone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+function hasAnyEntries(dayKey) {
+  const dayLogs = APP.logs[dayKey] || {};
+  return Object.values(dayLogs).some(sets =>
+    (sets || []).some(s => (String(s.weight || "").trim() !== "" || String(s.reps || "").trim() !== ""))
+  ) || String(APP.notes[dayKey] || "").trim() !== "";
+}
+
 // ---------- UI ----------
 const view = document.getElementById("view");
 const tabs = document.querySelectorAll(".tab");
@@ -90,21 +116,19 @@ tabs.forEach(tab => {
   tab.addEventListener("click", () => {
     tabs.forEach(t => t.classList.remove("active"));
     tab.classList.add("active");
-    APP.activeDay = tab.dataset.day;
+    APP.activeTab = tab.dataset.day;
     saveState();
     render();
   });
 });
 
-// Make correct tab active after refresh
-tabs.forEach(t => t.classList.toggle("active", t.dataset.day === APP.activeDay));
+// Set correct active tab on load
+tabs.forEach(t => t.classList.toggle("active", t.dataset.day === APP.activeTab));
 
 function render() {
-  if (APP.activeDay === "profile") {
-    renderProfile();
-    return;
-  }
-  renderDay();
+  if (APP.activeTab === "profile") return renderProfile();
+  if (APP.activeTab === "history") return renderHistory();
+  return renderDay(APP.activeTab);
 }
 
 function renderProfile() {
@@ -113,7 +137,7 @@ function renderProfile() {
   view.innerHTML = `
     <div class="card">
       <h2>Profile</h2>
-      <p class="small">Saved on this iPhone only. No account needed.</p>
+      <p class="small">Saved on this iPhone only (no account).</p>
 
       <div class="grid">
         <div>
@@ -187,14 +211,17 @@ function renderProfile() {
   });
 }
 
-function renderDay() {
-  const dayKey = APP.activeDay;
+function renderDay(dayKey) {
   const day = PROGRAM[dayKey];
 
   view.innerHTML = `
     <div class="card">
       <h2>${day.title}</h2>
-      <p class="small"><b>${escapeHtml(APP.profile.name || "Player")}</b> • ${escapeHtml(APP.profile.position || "Football")} • ${escapeHtml(APP.profile.goals || "Strength + speed")}</p>
+      <p class="small">
+        <b>${escapeHtml(APP.profile.name || "Player")}</b>
+        • ${escapeHtml(APP.profile.position || "Football")}
+        • ${escapeHtml(APP.profile.goals || "Strength + speed")}
+      </p>
 
       <div class="grid">
         <div>
@@ -214,9 +241,14 @@ function renderDay() {
       <p class="small">${day.note}</p>
 
       <div class="actions">
+        <button id="saveToHistory">Save Workout to History</button>
         <button class="secondary" id="clearDay">Clear Day Logs</button>
-        <button class="secondary" id="clearAll">Reset All</button>
+        <button class="secondary" id="resetAll">Reset All</button>
       </div>
+
+      <p class="small">
+        Tip: Save to History when you finish. (It won’t automatically create a history entry.)
+      </p>
     </div>
   `;
 
@@ -225,6 +257,30 @@ function renderDay() {
     saveState();
   });
 
+  // Save to history button
+  view.querySelector("#saveToHistory").addEventListener("click", () => {
+    if (!hasAnyEntries(dayKey)) {
+      alert("Nothing to save yet — log at least one set or a note.");
+      return;
+    }
+    const entry = {
+      id: uid(),
+      savedAt: new Date().toISOString(),
+      date: APP.date || todayISO(),
+      dayKey,
+      dayTitle: day.title,
+      profileSnapshot: deepClone(APP.profile),
+      logs: deepClone(APP.logs[dayKey] || {}),
+      notes: String(APP.notes[dayKey] || "")
+    };
+    APP.history.unshift(entry);
+    // keep last 200 entries so storage doesn't balloon
+    APP.history = APP.history.slice(0, 200);
+    saveState();
+    alert("Saved to History ✅");
+  });
+
+  // Exercises
   day.exercises.forEach(ex => {
     ensureExerciseLog(dayKey, ex);
     const sets = APP.logs[dayKey][ex.name];
@@ -286,10 +342,11 @@ function renderDay() {
         reps: s.reps || String(ex.targetReps)
       }));
       saveState();
-      renderDay();
+      renderDay(dayKey);
     });
   });
 
+  // Notes
   const notesCard = document.createElement("div");
   notesCard.className = "card";
   notesCard.innerHTML = `
@@ -307,33 +364,149 @@ function renderDay() {
   // Bind weight/rep inputs
   view.querySelectorAll("input[data-ex]").forEach(inp => {
     inp.addEventListener("input", (e) => {
-      const exName = e.target.dataset.ex;
+      const exNameEsc = e.target.dataset.ex;
       const setIdx = Number(e.target.dataset.set);
       const field = e.target.dataset.field;
 
-      // exName stored escaped; map back by searching keys
-      const realName = Object.keys(APP.logs[dayKey]).find(k => escapeAttr(k) === exName) || exName;
+      // Map escaped dataset value back to the real exercise name key
+      const realName = Object.keys(APP.logs[dayKey]).find(k => escapeAttr(k) === exNameEsc) || exNameEsc;
 
       APP.logs[dayKey][realName][setIdx][field] = e.target.value;
       saveState();
     });
   });
 
-  // Clear buttons
+  // Clear day logs
   view.querySelector("#clearDay").addEventListener("click", () => {
     if (!confirm("Clear logs for this day?")) return;
     APP.logs[dayKey] = {};
+    APP.notes[dayKey] = "";
     saveState();
-    renderDay();
+    renderDay(dayKey);
   });
 
-  view.querySelector("#clearAll").addEventListener("click", () => {
-    if (!confirm("Reset ALL logs, notes, and profile?")) return;
+  // Reset all
+  view.querySelector("#resetAll").addEventListener("click", () => {
+    if (!confirm("Reset ALL logs, notes, profile, and history?")) return;
     localStorage.removeItem(KEY);
     APP = loadState();
-    tabs.forEach(t => t.classList.toggle("active", t.dataset.day === APP.activeDay));
+    tabs.forEach(t => t.classList.toggle("active", t.dataset.day === APP.activeTab));
     render();
   });
+}
+
+function renderHistory() {
+  const items = APP.history || [];
+
+  view.innerHTML = `
+    <div class="card">
+      <h2>History</h2>
+      <p class="small">These are workouts you saved using “Save Workout to History.”</p>
+      <div class="actions">
+        <button class="secondary" id="clearHistory">Clear History</button>
+      </div>
+    </div>
+  `;
+
+  const container = document.createElement("div");
+  container.style.display = "grid";
+  container.style.gap = "12px";
+
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "card";
+    empty.innerHTML = `<p class="small">No history yet. Go to a Day tab, log your workout, then tap “Save Workout to History.”</p>`;
+    container.appendChild(empty);
+  } else {
+    items.forEach(entry => {
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const when = new Date(entry.savedAt).toLocaleString();
+      const name = entry.profileSnapshot?.name || "Player";
+
+      card.innerHTML = `
+        <div class="exerciseHeader">
+          <div class="exerciseName">${escapeHtml(entry.dayTitle || entry.dayKey)} — ${escapeHtml(entry.date || "")}</div>
+          <div class="targetBadge">${escapeHtml(name)}</div>
+        </div>
+        <p class="small">Saved: ${escapeHtml(when)}</p>
+
+        <div class="actions">
+          <button class="secondary" data-toggle="${escapeAttr(entry.id)}">Show / Hide Details</button>
+          <button class="secondary" data-delete="${escapeAttr(entry.id)}">Delete</button>
+        </div>
+
+        <div id="details-${escapeAttr(entry.id)}" style="display:none; margin-top:10px;"></div>
+      `;
+
+      container.appendChild(card);
+
+      // Toggle details
+      card.querySelector(`[data-toggle="${cssEscape(entry.id)}"]`)?.addEventListener("click", () => {
+        const details = card.querySelector(`#details-${cssEscape(entry.id)}`);
+        const isOpen = details.style.display === "block";
+        if (isOpen) {
+          details.style.display = "none";
+          details.innerHTML = "";
+          return;
+        }
+
+        details.style.display = "block";
+        details.innerHTML = buildHistoryDetailsHtml(entry);
+      });
+
+      // Delete entry
+      card.querySelector(`[data-delete="${cssEscape(entry.id)}"]`)?.addEventListener("click", () => {
+        if (!confirm("Delete this history entry?")) return;
+        APP.history = (APP.history || []).filter(h => h.id !== entry.id);
+        saveState();
+        renderHistory();
+      });
+    });
+  }
+
+  view.appendChild(container);
+
+  view.querySelector("#clearHistory").addEventListener("click", () => {
+    if (!confirm("Clear ALL history?")) return;
+    APP.history = [];
+    saveState();
+    renderHistory();
+  });
+}
+
+function buildHistoryDetailsHtml(entry) {
+  const logs = entry.logs || {};
+  const notes = String(entry.notes || "").trim();
+
+  const exBlocks = Object.keys(logs).map(exName => {
+    const sets = logs[exName] || [];
+    const rows = sets.map((s, i) => {
+      const w = String(s.weight || "").trim();
+      const r = String(s.reps || "").trim();
+      const left = (w !== "") ? `${w}` : "—";
+      const right = (r !== "") ? `${r}` : "—";
+      return `<div class="small">Set ${i + 1}: Weight ${escapeHtml(left)} • Reps ${escapeHtml(right)}</div>`;
+    }).join("");
+
+    return `
+      <div style="margin-top:10px;">
+        <div style="font-weight:800; margin-bottom:6px;">${escapeHtml(exName)}</div>
+        ${rows || `<div class="small">No sets logged.</div>`}
+      </div>
+    `;
+  }).join("");
+
+  const noteBlock = notes
+    ? `<div style="margin-top:12px;"><div style="font-weight:800; margin-bottom:6px;">Notes</div><div class="small">${escapeHtml(notes)}</div></div>`
+    : "";
+
+  if (exBlocks === "" && !noteBlock) {
+    return `<p class="small">No details logged.</p>`;
+  }
+
+  return `${exBlocks}${noteBlock}`;
 }
 
 // ---------- Escaping helpers ----------
@@ -347,7 +520,6 @@ function escapeHtml(str) {
 }
 
 function escapeAttr(str) {
-  // safe for HTML attributes
   return escapeHtml(str).replaceAll("`", "");
 }
 

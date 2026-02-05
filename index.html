@@ -4,23 +4,36 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Graham’s Workout Plan</title>
-  <link rel="manifest" href="manifest.json">
+
+  <!-- PWA basics -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#4aa3ff" />
+
+  <!-- Styles -->
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
   <header>
     <h1>Graham’s Workout Plan</h1>
-    <p class="subtitle">Off-Season Football • Strength + Speed • Age 14</p>
+    <p class="subtitle">Off-Season Football • Strength & Speed • Age 14</p>
   </header>
 
+  <!-- Navigation Tabs -->
   <nav class="tabs">
     <button class="tab active" data-day="day1">Day 1</button>
     <button class="tab" data-day="day2">Day 2</button>
     <button class="tab" data-day="day3">Day 3</button>
+    <button class="tab" data-day="profile">Profile</button>
   </nav>
 
-  <main id="view"></main>
+  <!-- Main App View -->
+  <main id="view">
+    <!-- Content is injected here by app.js -->
+  </main>
 
+  <!-- App Logic -->
   <script src="app.js"></script>
+
 </body>
 </html>
